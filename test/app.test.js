@@ -97,6 +97,19 @@ test('drafts and quotes cannot receive payments; expenses cannot link to invoice
  assert.equal((await request('/transactions','POST',{...payment(10),kind:'expense',invoice_id:null,notes:'=SUM(1,1)'})).status,200);
  const csv = await request('/export'); const contents = new TextDecoder().decode(csv.result); assert.match(contents,/'=SUM\(1,1\)/); assert.match(contents,/۱۴۰۵\/۰۸\/۰۷/); assert.ok(!contents.includes('2026-10-29'));
 });
+test('invoice and customer exports render, and unknown sheets are rejected', async () => {
+ const invoiceCsv = new TextDecoder().decode((await request('/export?type=invoices')).result);
+ assert.match(invoiceCsv,/شماره/); assert.match(invoiceCsv,/IPS-0000/); assert.match(invoiceCsv,/۱۴۰۵\//);
+ const customerCsv = new TextDecoder().decode((await request('/export?type=customers')).result);
+ assert.match(customerCsv,/مانده حساب/); assert.match(customerCsv,/مشتری آزمایشی/);
+ assert.equal((await request('/export?type=users')).status,400);
+});
+test('invoice QR renders a PNG and hides unknown documents', async () => {
+ const qr = await request(`/invoices/${invoiceId}/qr`);
+ assert.equal(qr.status,200); assert.equal(qr.response.headers.get('content-type'),'image/png');
+ assert.deepEqual([...new Uint8Array(qr.result).slice(0,4)],[0x89,0x50,0x4e,0x47]);
+ assert.equal((await request('/invoices/999999/qr')).status,404);
+});
 test('customer details are frozen on issued documents', async () => {
  await request('/customers/'+customerId,'PUT',{...customer,name:'نام جدید'});
  const i = (await request('/invoices')).result.find(i => i.id === invoiceId); assert.equal(i.customer_snapshot.name,customer.name);
