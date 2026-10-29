@@ -1,0 +1,9 @@
+node_modules/
+data/
+.env
+*.sqlite*
+coverage/
+private-backup/
+*.key
+.claude/settings.local.json
+*.pdf
