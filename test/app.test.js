@@ -36,6 +36,7 @@ test('private APIs reject unauthenticated access and assets carry security heade
  const res = await fetch(origin);
  assert.equal(res.status,200); assert.match(res.headers.get('content-security-policy'),/script-src 'self'/); assert.equal(res.headers.get('x-frame-options'),'SAMEORIGIN');
  assert.equal((await fetch(origin+'/fonts/Vazirmatn%5Bwght%5D.woff2')).status,200);
+ assert.equal((await fetch(origin+'/vandar-icon.svg')).status,200);
  assert.equal((await fetch(origin+'/data/accounting.sqlite')).status,404);
 });
 test('setup validates token, password, and can run only once', async () => {

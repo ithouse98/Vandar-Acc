@@ -21,13 +21,14 @@ for (const item of ['public', 'node_modules']) await cp(join(root, item), join(o
 await mkdir(join(output, 'scripts'));
 await copyFile(join(root, 'scripts', 'recover-admin.js'), join(output, 'scripts', 'recover-admin.js'));
 await copyFile(join(root, 'portable', 'راهنما.txt'), join(output, 'راهنما.txt'));
+await copyFile(join(root, 'portable', 'Vandar.ico'), join(output, 'Vandar.ico'));
 for (const item of ['Install-Service.ps1', 'Uninstall-Service.ps1']) await copyFile(join(root, 'portable', item), join(output, item));
 await copyFile(join(root, 'portable', `NODE-LICENSE-${process.version}.txt`), join(output, 'NODE-LICENSE.txt'));
 await copyFile(process.execPath, join(output, 'node.exe'));
 const compiler = join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
-const compiled = spawnSync(compiler, ['/nologo', '/target:winexe', '/codepage:65001', `/out:${join(output, 'Vandar.exe')}`, '/reference:System.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll', join(root, 'portable', 'Tray.cs')], { stdio: 'inherit' });
+const compiled = spawnSync(compiler, ['/nologo', '/target:winexe', '/codepage:65001', `/out:${join(output, 'Vandar.exe')}`, `/win32icon:${join(root, 'portable', 'Vandar.ico')}`, '/reference:System.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll', join(root, 'portable', 'Tray.cs')], { stdio: 'inherit' });
 if (compiled.status !== 0) throw new Error('Tray application compilation failed');
-const service = spawnSync(compiler, ['/nologo', '/target:exe', '/codepage:65001', `/out:${join(output, 'VandarService.exe')}`, '/reference:System.dll', '/reference:System.ServiceProcess.dll', join(root, 'portable', 'Service.cs')], { stdio: 'inherit' });
+const service = spawnSync(compiler, ['/nologo', '/target:exe', '/codepage:65001', `/out:${join(output, 'VandarService.exe')}`, `/win32icon:${join(root, 'portable', 'Vandar.ico')}`, '/reference:System.dll', '/reference:System.ServiceProcess.dll', join(root, 'portable', 'Service.cs')], { stdio: 'inherit' });
 if (service.status !== 0) throw new Error('Windows service compilation failed');
 const targetData = join(output, 'data');
 await mkdir(targetData);

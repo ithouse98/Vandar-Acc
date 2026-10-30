@@ -1,10 +1,10 @@
 # انتشار وَندار در GitHub
 
-برای انتشار به Git، Node.js 24.21.0، .NET Framework 4 و [GitHub CLI](https://cli.github.com/) روی رایانهٔ سازنده نیاز دارید. پیش از اجرا با `gh auth login` وارد حساب GitHub شوید.
+برای انتشار به Git، Node.js 24.21.0، .NET Framework 4.5 یا جدیدتر و [GitHub CLI](https://cli.github.com/) روی رایانهٔ سازنده نیاز دارید. پیش از اجرا با `gh auth login` وارد حساب GitHub شوید.
 
 ۱. تغییرات کد را بررسی و commit کنید. اسکریپت فقط درخت Git تمیز را منتشر می‌کند و فایل‌های `data/`، `dist/` و کلیدها را نباید به Git اضافه کنید.
 
-۲. برای ساخت و آزمون بستهٔ قابل انتشار بدون ارسال به GitHub:
+۲. برای ساخت و آزمون ZIP پرتابل و Setup یک‌فایلی، بدون ارسال به GitHub:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-release.ps1 -BuildOnly
@@ -13,11 +13,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-releas
 ۳. برای آپلود کد و ساخت Release، نام مخزن و نسخه را مشخص کنید:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-release.ps1 -Repo OWNER/REPO -Version v1.0.0
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-release.ps1 -Repo OWNER/REPO -Version v1.1.0
 ```
 
 اگر مخزن هنوز وجود نداشته باشد، اسکریپت آن را **خصوصی** می‌سازد. برای ایجاد مخزن عمومی، `-Visibility public` را اضافه کنید. اگر `origin` از قبل تنظیم شده باشد، اسکریپت فقط وقتی ادامه می‌دهد که به همان مخزن اشاره کند. متن توضیحات Release در `docs/release-notes.md` است؛ برای نسخه‌های بعدی آن را ویرایش کنید.
 
 **مهم:** فایل ZIP شخصیِ ساخته‌شده بدون `--release` شامل پایگاه داده و کلید رمزگذاری است و نباید در GitHub آپلود شود. اسکریپت انتشار بسته‌ای تازه با پوشهٔ دادهٔ خالی می‌سازد و پیش از آپلود محتویات ZIP را بررسی می‌کند.
+
+Release هر دو فایل `Vandar-Portable-v1.1.0-win-x64.zip` و `Vandar-Setup-v1.1.0-win-x64.exe` را دریافت می‌کند. Setup نیز فقط همان بستهٔ پاک را در خود دارد. اگر همین نسخه را قبلاً با `-BuildOnly` ساخته‌اید، پیش از ساخت دوباره فایل‌های خروجی همان نسخه را از `dist` کنار بگذارید؛ سازنده برای جلوگیری از جایگزینی ناخواسته، روی فایل موجود نمی‌نویسد.
 
 بستهٔ جدید شامل لانچر کنار ساعت، سرویس ویندوز، اسکریپت نصب و حذف سرویس، میانبر تمام‌صفحه و ابزار بازیابی گذرواژه است. نصب سرویس اختیاری است؛ کاربر باید ابتدا حساب مدیر را در حالت پرتابل بسازد و برنامه را ببندد. نصب سرویس دسترسی Administrator می‌خواهد و داده را در `%ProgramData%\Vandar\data` نگه می‌دارد. راهنمای داخل ZIP جزئیات را توضیح می‌دهد.

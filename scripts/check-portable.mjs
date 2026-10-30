@@ -8,6 +8,8 @@ import { DatabaseSync } from 'node:sqlite';
 
 const folder = resolve(process.argv[2]);
 assert.ok((await stat(join(folder, 'Vandar.exe'))).size > 0);
+assert.ok((await stat(join(folder, 'Vandar.ico'))).size > 0);
+assert.ok((await stat(join(folder, 'public', 'vandar-icon.svg'))).size > 0);
 assert.ok((await stat(join(folder, 'VandarService.exe'))).size > 0);
 assert.ok((await stat(join(folder, 'Install-Service.ps1'))).size > 0);
 assert.ok((await stat(join(folder, 'scripts', 'recover-admin.js'))).size > 0);

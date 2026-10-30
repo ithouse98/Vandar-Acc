@@ -27,7 +27,7 @@ h1,h2,h3,p{margin:0}h1{font-size:26px;font-weight:750;letter-spacing:-.8px}h2{fo
 small,.muted{color:var(--muted)}
 .icon{width:20px;height:20px;vertical-align:middle;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .brand{display:flex;align-items:center;gap:11px}
-.brandmark{display:grid;place-items:center;background:var(--gold);color:var(--gold-ink);width:41px;height:44px;border-radius:13px 13px 22px 13px;font-weight:900;font-size:28px}
+.brandmark{display:block;width:41px;height:44px;object-fit:contain;flex-shrink:0}
 .brand strong{font-size:25px;line-height:1.2;letter-spacing:-1px}.brand small{display:block;font-size:10px;letter-spacing:.5px;margin-top:3px}
 
 /* ستون کنار و نوار بالا */
@@ -254,7 +254,7 @@ dialog::backdrop{background:#0e221c7a;backdrop-filter:blur(4px)}
 .invoice-preview small{color:var(--doc-muted)}
 .invoice-preview .invoice-banner{display:flex;justify-content:space-between;gap:20px;border-bottom:3px solid var(--doc-accent);padding-bottom:22px;margin-bottom:22px}
 .invoice-preview .invoice-banner .badge{background:var(--doc-head);color:var(--doc-accent)}
-.invoice-preview .brandmark{background:var(--doc-accent);color:#fff}
+.invoice-preview .brandmark{background:transparent}
 .invoice-preview .parties{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:22px 0;font-size:12px}
 .invoice-preview .parties p{color:var(--doc-muted);font-size:11px}
 .invoice-preview .totals-box{background:var(--doc-head);border:1px solid var(--doc-line);color:var(--doc-ink);border-radius:var(--doc-radius)}
@@ -286,7 +286,7 @@ dialog::backdrop{background:#0e221c7a;backdrop-filter:blur(4px)}
 .invoice-preview.corporate .invoice-banner{background:var(--doc-accent);margin:-40px -40px 24px;padding:28px 40px;border:0}
 .invoice-preview.corporate .invoice-banner h2,.invoice-preview.corporate .invoice-banner small,.invoice-preview.corporate .invoice-banner p{color:#fff}
 .invoice-preview.corporate .invoice-banner .badge{background:#ffffff26;color:#fff}
-.invoice-preview.corporate .brandmark{background:#fff;color:var(--doc-accent)}
+.invoice-preview.corporate .brandmark{background:transparent}
 .invoice-preview.landscape{--doc-ink:#111;--doc-line:#222;--doc-head:#fff;--doc-accent:#111;min-width:980px;min-height:640px;padding:25px 30px;color:#111;font-size:12px}
 .landscape-head{display:grid;grid-template-columns:220px 1fr 180px;align-items:center;gap:12px;margin-bottom:14px}.landscape-head h2{text-align:center;font-size:25px}.landscape-head p{margin:2px 0}.landscape-head span{text-align:left}
 .landscape-party{border:1px solid #222;border-radius:5px;margin-bottom:8px}.landscape-party h3,.landscape-lines h3{text-align:center;border-bottom:1px solid #222;padding:3px;font-size:13px}.landscape-party>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 20px;padding:7px 12px}.landscape-party p{margin:0;min-width:0;overflow-wrap:anywhere}

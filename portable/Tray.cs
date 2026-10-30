@@ -57,7 +57,7 @@ internal sealed class VandarTray : ApplicationContext
         menu.Items.Add(tokenItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("بستن وَندار", null, (s, e) => ExitThread()));
-        icon = new NotifyIcon { Icon = SystemIcons.Application, Text = "وَندار", ContextMenuStrip = menu, Visible = true };
+        icon = new NotifyIcon { Icon = new Icon(Path.Combine(root, "Vandar.ico")), Text = "وَندار", ContextMenuStrip = menu, Visible = true };
         icon.DoubleClick += (s, e) => Open();
 
         var start = new ProcessStartInfo(Path.Combine(root, "node.exe"), "\"" + Path.Combine(root, "server.js") + "\"")

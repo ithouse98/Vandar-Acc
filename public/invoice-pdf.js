@@ -42,7 +42,7 @@ export async function downloadInvoicePdf(invoice, seller) {
   await document.fonts.ready;
   const customer = invoice.customer_snapshot;
   const [logo, seal, qr] = await Promise.all([
-    loadImage(seller.logo_id && `/api/logo/${seller.logo_id}`),
+    loadImage(seller.logo_id ? `/api/logo/${seller.logo_id}` : '/vandar-icon.png'),
     loadImage(seller.seal_id && `/api/logo/${seller.seal_id}`),
     loadImage(`/api/invoices/${invoice.id}/qr`)
   ]);
