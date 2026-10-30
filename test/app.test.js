@@ -11,7 +11,7 @@ import sharp from 'sharp';
 const dir = mkdtempSync(join(tmpdir(), 'vandar-test-'));
 const port = 32000 + Math.floor(Math.random() * 10000);
 const origin = `http://localhost:${port}`;
-let child, cookie = '', csrf = '', customerId, invoiceId, recovery, logoId;
+let child, cookie = '', csrf = '', customerId, invoiceId, recovery, logoId, sealId;
 let password = ' a-long-test-password ';
 async function request(path, method = 'GET', body, options = {}) {
  const response = await fetch(origin + '/api' + path, { method, headers:{ Origin:origin, Cookie:cookie, 'Content-Type':'application/json', 'X-CSRF-Token':csrf, ...options.headers }, ...(body === undefined ? {} : { body:JSON.stringify(body) }) });
@@ -32,6 +32,7 @@ after(async () => { if (child && child.exitCode === null) { child.kill(); await 
 
 test('private APIs reject unauthenticated access and assets carry security headers', async () => {
  assert.equal((await request('/customers')).status,401);
+ assert.equal((await request('/services')).status,401);
  const res = await fetch(origin);
  assert.equal(res.status,200); assert.match(res.headers.get('content-security-policy'),/script-src 'self'/); assert.equal(res.headers.get('x-frame-options'),'SAMEORIGIN');
  assert.equal((await fetch(origin+'/fonts/Vazirmatn%5Bwght%5D.woff2')).status,200);
@@ -39,6 +40,7 @@ test('private APIs reject unauthenticated access and assets carry security heade
 });
 test('setup validates token, password, and can run only once', async () => {
  assert.equal((await request('/setup','POST',{token:'wrong',email:'owner@example.com',name:'مدیر',password})).status,403);
+ assert.equal((await request('/setup','POST',{token:'test-setup-secret',email:'owner@example.com',name:'مدیر',password:'1234567'})).status,400);
  assert.equal((await request('/setup','POST',{token:'test-setup-secret',email:'owner@example.com',name:'مدیر',password})).status,200);
  const session = await request('/session'); assert.equal(session.result.authenticated,true);
  assert.equal((await request('/setup','POST',{})).status,409);
@@ -49,10 +51,27 @@ test('origin and CSRF guards reject writes', async () => {
  assert.equal((await request('/customers')).result.length,0);
 });
 test('customer CRUD and parameterized search do not execute SQL', async () => {
+ assert.equal((await request('/customers','POST',{...customer,phone:'hello'})).status,400);
+ assert.equal((await request('/customers','POST',{...customer,phone:'091234'})).status,400);
  const response = await request('/customers','POST',customer); assert.equal(response.status,200); customerId = response.result.id;
+ assert.equal((await request('/customers/'+customerId,'PUT',{...customer,phone:'۰۹۱۲۰۰۰۰۰۰۰'})).status,200);
+ assert.equal((await request('/customers')).result[0].phone,'09120000000');
  assert.equal((await request('/customers/'+customerId,'PUT',{...customer,name:"مشتری '); DROP TABLE customers; --"})).status,200);
  assert.equal((await request('/customers')).result.length,1);
  assert.equal((await request('/customers/'+customerId,'PUT',customer)).status,200);
+});
+test('service catalog validates prices and duplicate names', async () => {
+ assert.equal((await request('/services','POST',{name:'طراحی نرم‌افزار',price:-1})).status,400);
+ assert.equal((await request('/services','POST',{name:'طراحی نرم‌افزار'})).status,400);
+ const created = await request('/services','POST',{name:'طراحی نرم‌افزار',price:1000000});
+ assert.equal(created.status,200);
+ const id = created.result.id;
+ assert.equal((await request('/services','POST',{name:'طراحی نرم‌افزار',price:2})).status,409);
+ assert.deepEqual((await request('/services')).result.map(s => [s.name,s.price]),[['طراحی نرم‌افزار',1000000]]);
+ assert.equal((await request('/services/'+id,'PUT',{name:'طراحی نرم‌افزار',price:1500000})).status,200);
+ assert.equal((await request('/services')).result[0].price,1500000);
+ assert.equal((await request('/services/'+id,'DELETE')).status,200);
+ assert.equal((await request('/services')).result.length,0);
 });
 test('logo upload validates and normalizes images, protects access and keeps history', async () => {
  assert.equal((await request('/logo','POST',{image:'data:image/svg+xml;base64,PHN2Zy8+'})).status,400);
@@ -66,13 +85,30 @@ test('logo upload validates and normalizes images, protects access and keeps his
  assert.equal((await request('/logo/'+logoId,'GET',undefined,{headers:{Cookie:''}})).status,401);
  assert.equal((await request('/settings')).result.logo_id,logoId);
 });
+test('transparent seller seal is validated and saved for invoice snapshots', async () => {
+ const opaque = await sharp({create:{width:20,height:20,channels:3,background:'#fff'}}).jpeg().toBuffer();
+ assert.equal((await request('/seal','POST',{image:'data:image/jpeg;base64,'+opaque.toString('base64')})).status,400);
+ const transparent = await sharp({create:{width:20,height:20,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).png().toBuffer();
+ const saved = await request('/seal','POST',{image:'data:image/png;base64,'+transparent.toString('base64')});
+ assert.equal(saved.status,200);
+ sealId = saved.result.id;
+ assert.equal((await request('/settings')).result.seal_id,sealId);
+ const served = await request('/logo/'+sealId);
+ assert.equal((await sharp(Buffer.from(served.result)).metadata()).hasAlpha,true);
+});
 test('invoice arithmetic is calculated on server and validation is atomic', async () => {
  assert.equal((await request('/invoices','POST',{...invoice(),discount:999999999})).status,400);
  assert.equal((await request('/invoices','POST',{...invoice(),date:'2026-02-30'})).status,400);
  assert.equal((await request('/invoices','POST',{...invoice(),items:[{description:'x',quantity:0,price:5}]})).status,400);
  const response = await request('/invoices','POST',{...invoice(),total:1}); assert.equal(response.status,200); invoiceId = response.result.id;
  const i = (await request('/invoices')).result[0]; assert.equal(i.subtotal,2000000); assert.equal(i.tax,190000); assert.equal(i.total,2090000); assert.equal(i.number,'IPS-00001');
+ assert.equal(i.seller_snapshot.seal_id,sealId);
  assert.equal((await request('/customers/'+customerId,'DELETE')).status,400);
+});
+test('service price changes do not rewrite issued invoice lines', async () => {
+ const id = (await request('/services','POST',{name:'طراحی نرم‌افزار',price:1000000})).result.id;
+ assert.equal((await request('/services/'+id,'PUT',{name:'طراحی نرم‌افزار',price:2000000})).status,200);
+ assert.equal((await request('/invoices')).result[0].items[0].price,1000000);
 });
 test('concurrent stale invoice edits fail without overwriting', async () => {
  assert.equal((await request('/invoices/'+invoiceId,'PUT',{...invoice(),version:1})).status,200);
@@ -89,7 +125,8 @@ test('payments support partial settlement, reject overpayments and lock paid inv
  assert.equal((await request('/customers')).result[0].balance,0);
 });
 test('drafts and quotes cannot receive payments; expenses cannot link to invoices', async () => {
- const draft = await request('/invoices','POST',{...invoice(),status:'draft'});
+ const draft = await request('/invoices','POST',{...invoice(),status:'draft',template:'landscape'});
+ assert.equal((await request('/invoices')).result.find(i => i.id === draft.result.id).template,'landscape');
  assert.equal((await request('/transactions','POST',{...payment(10),invoice_id:draft.result.id})).status,400);
  const quote = await request('/invoices','POST',{...invoice(),kind:'quote'});
  assert.equal((await request('/transactions','POST',{...payment(10),invoice_id:quote.result.id})).status,400);

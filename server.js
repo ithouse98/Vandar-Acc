@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, csrf TEXT NOT NULL,
 CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), business TEXT NOT NULL DEFAULT 'استودیو من', owner TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', iban TEXT NOT NULL DEFAULT '', invoice_prefix TEXT NOT NULL DEFAULT 'IPS', template TEXT NOT NULL DEFAULT 'modern');
 INSERT OR IGNORE INTO settings(id) VALUES(1);
 CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, company TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', national_id TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS services (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, price INTEGER NOT NULL CHECK(price>=0), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS invoices (id INTEGER PRIMARY KEY, number TEXT NOT NULL UNIQUE, customer_id INTEGER NOT NULL REFERENCES customers(id), customer_snapshot TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('invoice','proforma','quote')), status TEXT NOT NULL CHECK(status IN ('draft','issued','void')), date TEXT NOT NULL, due_date TEXT NOT NULL, items TEXT NOT NULL, discount INTEGER NOT NULL, tax_rate INTEGER NOT NULL, subtotal INTEGER NOT NULL, tax INTEGER NOT NULL, total INTEGER NOT NULL, notes TEXT NOT NULL DEFAULT '', template TEXT NOT NULL DEFAULT 'modern', version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('income','expense')), invoice_id INTEGER REFERENCES invoices(id), amount INTEGER NOT NULL CHECK(amount>0), date TEXT NOT NULL, category TEXT NOT NULL, method TEXT NOT NULL, reference TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, action TEXT NOT NULL, details TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
@@ -35,6 +36,7 @@ if (!db.prepare('PRAGMA table_info(invoices)').all().some(c => c.name === 'selle
 }
 const app = express();
 if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === 'logo_id')) db.exec("ALTER TABLE settings ADD COLUMN logo_id TEXT NOT NULL DEFAULT ''");
+if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === 'seal_id')) db.exec("ALTER TABLE settings ADD COLUMN seal_id TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE TABLE IF NOT EXISTS logos (id TEXT PRIMARY KEY, image BLOB NOT NULL)');
 const production = process.env.NODE_ENV === 'production';
 const origin = process.env.PUBLIC_ORIGIN || 'http://localhost:3000';
@@ -44,6 +46,7 @@ app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'"], styleSrcAttr: ["'unsafe-inline'"], fontSrc: ["'self'"], imgSrc: ["'self'", 'data:'], connectSrc: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], upgradeInsecureRequests: production ? [] : null } }, strictTransportSecurity: production ? undefined : false }));
 app.use('/api', rateLimit({ windowMs: 60000, limit: 240, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/logo', express.json({ limit: '3mb' }));
+app.use('/api/seal', express.json({ limit: '3mb' }));
 app.use(express.json({ limit: '256kb' }));
 const query = (sql, ...args) => db.prepare(sql).all(...args);
 const one = (sql, ...args) => db.prepare(sql).get(...args);
@@ -55,14 +58,15 @@ const fail = (message, status = 400) => { throw Object.assign(new Error(message)
 const text = (value, max = 300, required = false) => { if (typeof value !== 'string' || value.length > max || (required && !value.trim())) fail('اطلاعات متنی نامعتبر است.'); return value.trim(); };
 const passwordText = value => { if (typeof value !== 'string' || value.length > 128 || !value) fail('گذرواژه معتبر نیست.'); return value; };
 const integer = (value, min = 0, max = 1e12) => { if (!Number.isSafeInteger(value) || value < min || value > max) fail('مبلغ یا عدد واردشده معتبر نیست.'); return value; };
-const invoiceTemplates = ['modern','classic','minimal','official','corporate','friendly','playful'];
+const invoiceTemplates = ['modern','classic','minimal','official','corporate','friendly','playful','landscape'];
 const choice = (value, values) => { if (!values.includes(value)) fail('گزینه انتخاب‌شده معتبر نیست.'); return value; };
 const date = value => { if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) fail('تاریخ معتبر نیست.'); return value; };
 const audit = (action, details = '') => run('INSERT INTO audit(action,details) VALUES(?,?)', action, details);
 const transaction = fn => { db.exec('BEGIN IMMEDIATE'); try { const result = fn(); db.exec('COMMIT'); return result; } catch (e) { db.exec('ROLLBACK'); throw e; } };
 const passwordHash = password => { const salt = randomBytes(16).toString('hex'); return `${salt}:${scryptSync(password, salt, 64).toString('hex')}`; };
 const passwordOK = (password, stored) => { const [salt, value] = stored.split(':'); return equal(scryptSync(password, salt, 64).toString('hex'), value); };
-const validatePassword = value => { text(value, 128, true); if (value.length < 12) fail('گذرواژه باید دست‌کم ۱۲ نویسه داشته باشد.'); return value; };
+const validatePassword = value => { text(value, 128, true); if (value.length < 8) fail('گذرواژه باید دست‌کم ۸ نویسه داشته باشد.'); return value; };
+const phone = value => { const normalized = text(value, 20).replace(/[۰-۹٠-٩]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit) >= 0 ? '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit) : '٠١٢٣٤٥٦٧٨٩'.indexOf(digit))); if (normalized && !/^09\d{9}$/.test(normalized)) fail('شماره موبایل باید با 09 شروع شود و ۱۱ رقم باشد.'); return normalized; };
 const encrypt = value => { const iv = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', key, iv); const body = Buffer.concat([cipher.update(value), cipher.final()]); return [iv, cipher.getAuthTag(), body].map(b => b.toString('hex')).join('.'); };
 const decrypt = value => { const [iv, tag, body] = value.split('.').map(v => Buffer.from(v, 'hex')); const cipher = createDecipheriv('aes-256-gcm', key, iv); cipher.setAuthTag(tag); return Buffer.concat([cipher.update(body), cipher.final()]).toString(); };
 const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -86,34 +90,43 @@ app.post('/api/security/totp/start', loginLimit, async (req, res) => { const use
 app.post('/api/security/totp/enable', loginLimit, (req, res) => { if (one('SELECT totp FROM users').totp) fail('ورود دومرحله‌ای قبلاً فعال شده است.'); if (!req.session.pending_totp) fail('ابتدا راه‌اندازی دومرحله‌ای را آغاز کنید.'); const step = validStep(decrypt(req.session.pending_totp), text(req.body.code, 6, true)); if (!step) fail('کد معتبر نیست.'); const codes = Array.from({ length: 8 }, () => randomBytes(6).toString('hex')); transaction(() => { run('UPDATE users SET totp=?,last_step=?,recovery=?', req.session.pending_totp, step, JSON.stringify(codes.map(hash))); run('DELETE FROM sessions WHERE token<>?', req.session.token); run('UPDATE sessions SET pending_totp=NULL WHERE token=?', req.session.token); audit('فعال‌سازی ورود دومرحله‌ای'); }); res.json({ codes }); });
 app.post('/api/security/password', loginLimit, (req, res) => { const user = one('SELECT * FROM users'); if (!passwordOK(passwordText(req.body.current), user.password)) fail('گذرواژه فعلی نادرست است.', 403); run('UPDATE users SET password=?', passwordHash(validatePassword(req.body.password))); run('DELETE FROM sessions WHERE token<>?', req.session.token); audit('تغییر گذرواژه'); res.json({ ok: true }); });
 app.get('/api/settings', (req, res) => res.json(one('SELECT * FROM settings')));
-app.post('/api/logo', rateLimit({ windowMs:60000,limit:10,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'تعداد بارگذاری‌ها زیاد است؛ یک دقیقه دیگر تلاش کنید.'} }), async (req, res) => {
+async function saveImage(req, res, seal = false) {
  const value = text(req.body.image, 2800000, true);
  const match = value.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
- if (!match) fail('لوگو باید تصویر PNG، JPEG یا WebP باشد.');
+ if (!match || (seal && match[1] === 'jpeg')) fail(seal ? 'برای مهر و امضا تصویر PNG یا WebP شفاف انتخاب کنید.' : 'لوگو باید تصویر PNG، JPEG یا WebP باشد.');
  const bytes = Buffer.from(match[2], 'base64');
- if (bytes.length > 2*1024*1024) fail('حداکثر اندازه لوگو ۲ مگابایت است.');
+ if (bytes.length > 2*1024*1024) fail('حداکثر اندازه تصویر ۲ مگابایت است.');
  let image;
  try {
   const source = sharp(bytes, { limitInputPixels:10000000, animated:false, failOn:'warning' });
   const metadata = await source.metadata();
-  if (!['png','jpeg','webp'].includes(metadata.format) || (metadata.pages || 1) > 1) fail('تصویر لوگو باید ثابت باشد.');
+  if (!['png','jpeg','webp'].includes(metadata.format) || (metadata.pages || 1) > 1 || (seal && !metadata.hasAlpha)) fail('برای مهر و امضا تصویر ثابت با زمینه شفاف انتخاب کنید.');
   image = await source.rotate().resize({ width:1024,height:1024,fit:'inside',withoutEnlargement:true }).png().toBuffer();
  } catch { fail('فایل تصویر معتبر نیست؛ از یک تصویر ثابت تا ۱۰ میلیون پیکسل استفاده کنید.'); }
  if (image.length > 4*1024*1024) fail('تصویر نهایی بزرگ است؛ یک لوگوی کوچک‌تر انتخاب کنید.');
  const id = createHash('sha256').update(image).digest('hex');
- transaction(() => { run('INSERT OR IGNORE INTO logos(id,image) VALUES(?,?)',id,image); run('UPDATE settings SET logo_id=?',id); audit('تغییر لوگوی کسب‌وکار'); });
+ transaction(() => { run('INSERT OR IGNORE INTO logos(id,image) VALUES(?,?)',id,image); run(`UPDATE settings SET ${seal ? 'seal_id' : 'logo_id'}=?`,id); audit(seal ? 'تغییر مهر و امضا' : 'تغییر لوگوی کسب‌وکار'); });
  res.json({ id });
-});
+}
+const imageLimit = rateLimit({ windowMs:60000,limit:10,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'تعداد بارگذاری‌ها زیاد است؛ یک دقیقه دیگر تلاش کنید.'} });
+app.post('/api/logo', imageLimit, (req, res) => saveImage(req, res));
+app.post('/api/seal', imageLimit, (req, res) => saveImage(req, res, true));
 app.delete('/api/logo', (req, res) => { run("UPDATE settings SET logo_id=''"); audit('حذف لوگوی فعلی کسب‌وکار'); res.json({ ok:true }); });
+app.delete('/api/seal', (req, res) => { run("UPDATE settings SET seal_id=''"); audit('حذف مهر و امضای فعلی'); res.json({ ok:true }); });
 app.get('/api/logo/:id', (req, res) => { if (!/^[a-f0-9]{64}$/.test(req.params.id)) fail('لوگو پیدا نشد.',404); const logo = one('SELECT image FROM logos WHERE id=?',req.params.id); if (!logo) fail('لوگو پیدا نشد.',404); res.type('image/png').send(Buffer.from(logo.image)); });
 app.get('/api/invoices/:id/qr', async (req, res) => { const i = one('SELECT number,date,total,customer_snapshot,seller_snapshot FROM invoices WHERE id=?', req.params.id); if (!i) fail('فاکتور پیدا نشد.', 404); const seller = JSON.parse(i.seller_snapshot || '{}'); const summary = [`${seller.business || ''} | ${i.number}`, JSON.parse(i.customer_snapshot).name, `${formatPersianDate(i.date)} | ${i.total}`, seller.iban ? `IBAN ${seller.iban}` : ''].filter(Boolean).join('\n'); res.type('image/png').set('Cache-Control','no-store').send(await QRCode.toBuffer(summary, { margin:1, width:320, errorCorrectionLevel:'M' })); });
 app.put('/api/settings', (req, res) => { const b = req.body; const prefix = text(b.invoice_prefix, 15, true); if (!/^[A-Za-z0-9-]+$/.test(prefix)) fail('پیشوند فقط شامل حروف انگلیسی، عدد و خط تیره باشد.'); run('UPDATE settings SET business=?,owner=?,phone=?,address=?,iban=?,invoice_prefix=?,template=?', text(b.business, 150, true), text(b.owner, 100), text(b.phone, 40), text(b.address, 500), text(b.iban, 50), prefix, choice(b.template, invoiceTemplates)); audit('ویرایش تنظیمات'); res.json({ ok: true }); });
 const customerList = () => query("SELECT c.*,COALESCE((SELECT SUM(i.total) FROM invoices i WHERE i.customer_id=c.id AND i.status='issued' AND i.kind='invoice'),0)-COALESCE((SELECT SUM(t.amount) FROM transactions t JOIN invoices i ON i.id=t.invoice_id WHERE i.customer_id=c.id),0) AS balance FROM customers c ORDER BY c.id DESC");
 app.get('/api/customers', (req, res) => res.json(customerList()));
-function customerValues(b) { const email = text(b.email, 200); if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('ایمیل معتبر نیست.'); return [text(b.name, 150, true), text(b.company, 150), email, text(b.phone, 40), text(b.national_id, 40), text(b.address, 500), text(b.notes, 2000)]; }
+function customerValues(b) { const email = text(b.email, 200); if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('ایمیل معتبر نیست.'); return [text(b.name, 150, true), text(b.company, 150), email, phone(b.phone), text(b.national_id, 40), text(b.address, 500), text(b.notes, 2000)]; }
 app.post('/api/customers', (req, res) => { const r = run('INSERT INTO customers(name,company,email,phone,national_id,address,notes) VALUES(?,?,?,?,?,?,?)', ...customerValues(req.body)); audit('ثبت مشتری', String(r.lastInsertRowid)); res.json({ id: Number(r.lastInsertRowid) }); });
 app.put('/api/customers/:id', (req, res) => { const r = run('UPDATE customers SET name=?,company=?,email=?,phone=?,national_id=?,address=?,notes=? WHERE id=?', ...customerValues(req.body), req.params.id); if (!r.changes) fail('مشتری پیدا نشد.', 404); audit('ویرایش مشتری', req.params.id); res.json({ ok: true }); });
 app.delete('/api/customers/:id', (req, res) => { if (one('SELECT id FROM invoices WHERE customer_id=?', req.params.id)) fail('مشتری دارای فاکتور را نمی‌توان حذف کرد.'); run('DELETE FROM customers WHERE id=?', req.params.id); audit('حذف مشتری', req.params.id); res.json({ ok: true }); });
+app.get('/api/services', (req, res) => res.json(query('SELECT id,name,price FROM services ORDER BY name COLLATE NOCASE')));
+function serviceValues(b = {}, id = 0) { const name = text(b.name, 500, true); if (one('SELECT id FROM services WHERE name=? COLLATE NOCASE AND id<>?', name, id)) fail('این خدمت قبلاً ثبت شده است.', 409); return [name, integer(b.price, 0, 1e12)]; }
+app.post('/api/services', (req, res) => { const r = run('INSERT INTO services(name,price) VALUES(?,?)', ...serviceValues(req.body)); audit('ثبت خدمت', String(r.lastInsertRowid)); res.json({ id: Number(r.lastInsertRowid) }); });
+app.put('/api/services/:id', (req, res) => { const id = integer(Number(req.params.id), 1); const r = run('UPDATE services SET name=?,price=? WHERE id=?', ...serviceValues(req.body, id), id); if (!r.changes) fail('خدمت پیدا نشد.', 404); audit('ویرایش خدمت', String(id)); res.json({ ok: true }); });
+app.delete('/api/services/:id', (req, res) => { const id = integer(Number(req.params.id), 1); const r = run('DELETE FROM services WHERE id=?', id); if (!r.changes) fail('خدمت پیدا نشد.', 404); audit('حذف خدمت', String(id)); res.json({ ok: true }); });
 const invoices = () => query(`SELECT i.*,c.name AS customer_name,COALESCE((SELECT SUM(amount) FROM transactions WHERE invoice_id=i.id),0) AS paid FROM invoices i JOIN customers c ON c.id=i.customer_id ORDER BY i.id DESC`).map(i => ({ ...i, items: JSON.parse(i.items), customer_snapshot: JSON.parse(i.customer_snapshot), seller_snapshot: JSON.parse(i.seller_snapshot) }));
 app.get('/api/invoices', (req, res) => res.json(invoices()));
 function invoiceValues(b) { const customer = one('SELECT * FROM customers WHERE id=?', integer(b.customer_id, 1)); if (!customer) fail('مشتری پیدا نشد.'); if (!Array.isArray(b.items) || !b.items.length || b.items.length > 100) fail('فاکتور باید بین ۱ تا ۱۰۰ ردیف داشته باشد.'); const items = b.items.map(i => ({ description: text(i.description, 500, true), quantity: integer(i.quantity, 1, 1000000), price: integer(i.price, 0, 1e12) })); const subtotal = integer(items.reduce((sum, i) => sum + i.quantity * i.price, 0), 0, 1e14); const discount = integer(b.discount, 0, subtotal); const taxRate = integer(b.tax_rate, 0, 100); const tax = Math.round((subtotal - discount) * taxRate / 100); const total = integer(subtotal - discount + tax, 1, 1e14); const start = date(b.date); const due = date(b.due_date); if (due < start) fail('سررسید نمی‌تواند پیش از تاریخ صدور باشد.'); return [customer.id, JSON.stringify(customer), choice(b.kind, ['invoice','proforma','quote']), choice(b.status, ['draft','issued']), start, due, JSON.stringify(items), discount, taxRate, subtotal, tax, total, text(b.notes, 4000), choice(b.template, invoiceTemplates)]; }
@@ -138,4 +151,9 @@ app.use(express.static(join(root, 'public'), { etag: true }));
 app.use('/api', (req, res) => res.status(404).json({ error: 'مسیر پیدا نشد.' }));
 app.use((err, req, res, next) => { if (!err.status) console.error(err); res.status(err.status || 500).json({ error: err.status ? err.message : 'خطای داخلی؛ دوباره تلاش کنید.' }); });
 const port = Number(process.env.PORT || 3000);
-app.listen(port, process.env.HOST || '127.0.0.1', () => console.log(`IPS Factor: ${origin} (port ${port})`));
+const server = app.listen(port, process.env.HOST || '127.0.0.1', () => console.log(`IPS Factor: ${origin} (port ${port})`));
+// بستن منظم پایگاه داده هنگام توقف کانتینر؛ وگرنه WAL با SIGKILL نیمه‌کاره می‌ماند.
+let stopping = false;
+const stop = () => { if (stopping) return; stopping = true; server.close(() => { db.close(); process.exit(0); }); };
+for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, stop);
+if (process.env.PORTABLE_CONTROL === '1') process.stdin.once('data', stop);

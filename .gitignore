@@ -3,6 +3,7 @@ data/
 .env
 *.sqlite*
 coverage/
+dist/
 private-backup/
 *.key
 .claude/settings.local.json

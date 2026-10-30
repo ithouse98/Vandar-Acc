@@ -153,6 +153,10 @@ input[type=file]{padding:8px;background:var(--panel)}
 textarea{resize:vertical;min-height:90px}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .field{display:flex;flex-direction:column;gap:6px;font-size:12px}.field small{font-size:10px}
+.password-wrap{position:relative;display:block}.password-wrap input{padding-left:44px}.password-toggle{position:absolute;left:4px;top:4px;width:36px;height:34px;border-radius:8px;color:var(--muted);font-size:18px}.password-toggle:hover{background:var(--accent-soft);color:var(--accent)}
+.money-preview{display:block;color:var(--accent);font-size:16px;line-height:1.5;font-weight:750;overflow-wrap:anywhere}
+.seal-image{display:block;max-width:180px;max-height:110px;object-fit:contain;margin:8px auto;background:transparent}
+.invoice-signatures .seal-image{width:auto;height:90px;margin:4px auto 0}
 .span-2{grid-column:1/-1}
 .form-actions{display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--line);padding-top:20px;margin-top:24px;flex-wrap:wrap}
 .settings-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:20px}
@@ -283,6 +287,14 @@ dialog::backdrop{background:#0e221c7a;backdrop-filter:blur(4px)}
 .invoice-preview.corporate .invoice-banner h2,.invoice-preview.corporate .invoice-banner small,.invoice-preview.corporate .invoice-banner p{color:#fff}
 .invoice-preview.corporate .invoice-banner .badge{background:#ffffff26;color:#fff}
 .invoice-preview.corporate .brandmark{background:#fff;color:var(--doc-accent)}
+.invoice-preview.landscape{--doc-ink:#111;--doc-line:#222;--doc-head:#fff;--doc-accent:#111;min-width:980px;min-height:640px;padding:25px 30px;color:#111;font-size:12px}
+.landscape-head{display:grid;grid-template-columns:220px 1fr 180px;align-items:center;gap:12px;margin-bottom:14px}.landscape-head h2{text-align:center;font-size:25px}.landscape-head p{margin:2px 0}.landscape-head span{text-align:left}
+.landscape-party{border:1px solid #222;border-radius:5px;margin-bottom:8px}.landscape-party h3,.landscape-lines h3{text-align:center;border-bottom:1px solid #222;padding:3px;font-size:13px}.landscape-party>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 20px;padding:7px 12px}.landscape-party p{margin:0;min-width:0;overflow-wrap:anywhere}
+.landscape-lines{border:1px solid #222}.landscape-lines table{width:100%;border-collapse:collapse;table-layout:fixed}.landscape-lines th,.landscape-lines td{border:1px solid #222;padding:7px;text-align:center;color:#111;background:#fff}.landscape-lines th:nth-child(2),.landscape-lines td:nth-child(2){width:40%;text-align:right}.landscape-lines td{min-height:32px}
+.landscape-summary{display:flex;border:1px solid #222;border-top:0;flex-wrap:wrap}.landscape-summary span{flex:1;min-width:165px;border-left:1px solid #222;padding:7px;text-align:center}.landscape-summary span:last-child{border-left:0}
+.landscape-words,.landscape-notes{border:1px solid #222;border-top:0;padding:7px 12px;white-space:pre-wrap}.landscape-signatures{display:grid;grid-template-columns:1fr 1fr}.landscape-signatures>div{border:1px solid #222;border-top:0;min-height:105px;padding:9px 12px;text-align:center}.landscape-signatures>div:first-child{border-left:0}.landscape-signatures .seal-image{height:75px;margin:0 auto}
+.invoice-preview.landscape>small{display:block;margin-top:8px;font-size:9px}
+dialog:has(.invoice-preview.landscape) .modal-body{overflow:auto}
 
 /* قالب‌های غیررسمی سند */
 .invoice-preview.modern{--doc-accent:#205c49;--doc-head:#edf3ee;--doc-radius:8px}
@@ -321,4 +333,6 @@ dialog::backdrop{background:#0e221c7a;backdrop-filter:blur(4px)}
  .invoice-preview .invoice-banner{break-after:avoid}
  tr{break-inside:avoid}
  @page{size:A4;margin:12mm}
+ @page vandar-landscape{size:A4 landscape;margin:8mm}
+ .invoice-preview.landscape{page:vandar-landscape;min-width:0;padding:0}
 }

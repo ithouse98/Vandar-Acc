@@ -14,7 +14,7 @@ const output = new Writable({ write(chunk, encoding, callback) { if (!hidden) pr
 const prompt = createInterface({ input:process.stdin, output, terminal:true });
 try {
  console.log('Administrator recovery. Password input is hidden.');
- process.stdout.write('New password (at least 12 characters): ');
+ process.stdout.write('New password (at least 8 characters): ');
  hidden = true;
  const password = await prompt.question('');
  hidden = false;
@@ -23,7 +23,7 @@ try {
  const confirmation = await prompt.question('');
  hidden = false;
  console.log();
- if (password.length < 12 || password.length > 128 || !password.trim()) throw new Error('Password must have 12–128 characters.');
+ if (password.length < 8 || password.length > 128 || !password.trim()) throw new Error('Password must have 8–128 characters.');
  if (password !== confirmation) throw new Error('Passwords do not match.');
  const db = new DatabaseSync(path);
  db.exec('PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');

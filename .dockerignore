@@ -6,3 +6,7 @@ test
 private-backup
 *.sqlite*
 *.key
+docs
+.github
+README.md
+.gitattributes
