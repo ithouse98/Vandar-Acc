@@ -81,7 +81,7 @@ export async function createInvoicePdf(invoice, seller) {
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 1240, 1754);
     ctx.fillStyle = ink; ctx.fillRect(0, 0, 1240, 15);
     ctx.textAlign = 'center';
-    text(({ invoice:'فاکتور فروش', proforma:'پیش‌فاکتور', quote:'پیشنهاد قیمت' })[invoice.kind], 620, 120, 34, true);
+    text(({ invoice:'فاکتور فروش', proforma:'پیش‌فاکتور', quote:'پیشنهاد قیمت' })[invoice.kind], 620, 67, 30, true);
     ctx.textAlign = 'left';
     text(`شماره: ${invoice.number}`, 70, 91, 20);
     text(`تاریخ: ${formatPersianDate(invoice.date)}`, 70, 125, 20);
@@ -96,26 +96,39 @@ export async function createInvoicePdf(invoice, seller) {
     images.push(new Uint8Array(await blob.arrayBuffer()));
   };
   fresh();
-  image(logo, 1170, 115, 110, 100);
-  text(seller.business, logo ? 1035 : 1170, 145, 38, true);
-  text(seller.owner || '', logo ? 1035 : 1170, 185, 22);
+  image(logo, 1170, 95, 100, 90);
+  const businessX = logo ? 1055 : 1170;
+  font(24,true);
+  let businessLine = '', businessY = 109;
+  for (const word of String(seller.business || '').split(/\s+/)) {
+    const next = businessLine ? businessLine + ' ' + word : word;
+    if (businessLine && ctx.measureText(next).width > (logo ? 390 : 500)) { text(businessLine,businessX,businessY,24,true); businessY += 32; businessLine = word; }
+    else businessLine = next;
+  }
+  text(businessLine,businessX,businessY,24,true);
+  text(seller.owner || '', businessX, Math.min(194,businessY+36), 19);
   rule(220);
-  y = 268;
-  text(`فروشنده: ${seller.business}`, 1170, y, 25, true);
-  text(`خریدار: ${customer.name}`, 590, y, 25, true);
-  y += 42;
-  y = Math.max(wrap(seller.address || seller.phone || '', 1170, y, 520), wrap([customer.company, customer.phone, customer.address].filter(Boolean).join(' · '), 590, y, 500)) + 16;
+  const partyTop = 242;
+  y = partyTop + 39;
+  text('فروشنده', 1170, y, 23, true);
+  text('خریدار', 590, y, 23, true);
+  y = Math.max(wrap([seller.business,seller.phone,seller.address].filter(Boolean).join(' · '), 1170, y+36, 500, 21, 31), wrap([customer.name,customer.company,customer.phone,customer.address].filter(Boolean).join(' · '), 590, y+36, 360, 21, 31),partyTop+150);
+  const partyBottom = y + 10;
+  ctx.strokeStyle = '#60766a'; ctx.lineWidth = 2;
+  ctx.strokeRect(630,partyTop,540,partyBottom-partyTop);
+  ctx.strokeRect(70,partyTop,540,partyBottom-partyTop);
+  image(qr, 205, partyTop+45, 105, 105);
+  y = partyBottom + 37;
   text(`تاریخ صدور: ${formatPersianDate(invoice.date)}     سررسید: ${formatPersianDate(invoice.due_date)}`, 1170, y, 22);
-  image(qr, 200, y - 35, 120, 120);
-  y += 105;
+  y += 69;
   const header = () => {
     ctx.fillStyle = '#edf5ef'; ctx.fillRect(70, y - 30, 1100, 54);
     ctx.strokeStyle = '#60766a'; ctx.lineWidth = 2; ctx.strokeRect(70, y - 30, 1100, 54);
     for (const edge of [320,450,590]) { ctx.beginPath(); ctx.moveTo(edge,y-30); ctx.lineTo(edge,y+24); ctx.stroke(); }
     text('شرح خدمت', 1145, y + 7, 22, true);
-    text('تعداد', 475, y + 7, 22, true);
-    text('قیمت واحد', 350, y + 7, 22, true);
-    text('مبلغ (تومان)', 190, y + 7, 22, true);
+    text('تعداد', 570, y + 7, 19, true);
+    text('قیمت واحد', 435, y + 7, 19, true);
+    text('مبلغ (تومان)', 300, y + 7, 19, true);
     y += 54;
   };
   header();
@@ -133,9 +146,9 @@ export async function createInvoicePdf(invoice, seller) {
     ctx.strokeStyle = '#60766a'; ctx.lineWidth = 2; ctx.strokeRect(70,y-30,1100,height);
     for (const edge of [320,450,590]) { ctx.beginPath(); ctx.moveTo(edge,y-30); ctx.lineTo(edge,y-30+height); ctx.stroke(); }
     lines.forEach((part, index) => text(part, 1145, y + index * 34, 22));
-    text(format(item.quantity), 475, y, 22);
-    text(format(item.price), 350, y, 22);
-    text(format(item.quantity * item.price), 190, y, 22);
+    text(format(item.quantity), 570, y, 21);
+    text(format(item.price), 435, y, 21);
+    text(format(item.quantity * item.price), 300, y, 21);
     y += height;
   }
   if (y > 1110) { await finish(); fresh(); }
@@ -145,7 +158,14 @@ export async function createInvoicePdf(invoice, seller) {
     ['مبلغ کل', invoice.total],
     ...(invoice.kind === 'invoice' ? [['دریافت‌شده', invoice.paid], ['مانده', invoice.total - invoice.paid]] : [])
   ];
-  for (const [label, amount] of summary) { text(label, 610, y, 23, label === 'مبلغ کل'); text(`${format(amount)} تومان`, 340, y, 24, label === 'مبلغ کل'); y += 42; }
+  for (const [label, amount] of summary) {
+    ctx.strokeStyle = '#60766a'; ctx.lineWidth = 2;
+    ctx.strokeRect(70,y-30,620,42);
+    ctx.beginPath(); ctx.moveTo(380,y-30); ctx.lineTo(380,y+12); ctx.stroke();
+    text(label, 665, y, 23, label === 'مبلغ کل');
+    text(`${format(amount)} تومان`, 355, y, 24, label === 'مبلغ کل');
+    y += 42;
+  }
   const paragraph = async (value, size = 21) => {
     font(size);
     for (const part of String(value).split('\n')) {
@@ -167,7 +187,11 @@ export async function createInvoicePdf(invoice, seller) {
   if (invoice.notes) await paragraph(invoice.notes);
   if (seller.iban) await paragraph(`اطلاعات پرداخت: ${seller.iban}`);
   const sealScale = Math.min(2,Math.max(.4,Number(seller.seal_scale || 100)/100));
-  if (y + 40 + 130*sealScale > 1600) { await finish(); fresh(); }
+  const signatureHeight = Math.max(160,55+130*sealScale);
+  if (y + signatureHeight > 1600) { await finish(); fresh(); }
+  ctx.strokeStyle = '#60766a'; ctx.lineWidth = 2;
+  ctx.strokeRect(650,y-8,520,signatureHeight);
+  ctx.strokeRect(70,y-8,520,signatureHeight);
   text('مهر و امضای فروشنده', 1170, y + 25, 22, true);
   image(seal, 1170, y + 40, 270*sealScale, 130*sealScale);
   text('امضای خریدار', 570, y + 25, 22, true);

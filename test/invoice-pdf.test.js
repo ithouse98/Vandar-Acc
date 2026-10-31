@@ -31,9 +31,11 @@ test('PDF pages center the document title and draw a full item grid', async () =
  try {
   const pdf = await createInvoicePdf(invoice,{business:'فروشنده',owner:'',address:'',phone:'',seal_scale:100});
   assert.equal(pdf.type,'application/pdf');
-  assert.ok(calls.some(c => c[0]==='text' && c[1]==='پیش‌فاکتور' && c[2]===620 && c[4]==='center'));
+  assert.ok(calls.some(c => c[0]==='text' && c[1]==='پیش‌فاکتور' && c[2]===620 && c[3]===67 && c[4]==='center'));
   assert.ok(calls.some(c => c[0]==='text' && String(c[1]).startsWith('تاریخ:') && c[2]===70 && c[4]==='left'));
   assert.ok(calls.filter(c => c[0]==='rect' && c[3]===1100).length>=2);
+  assert.ok(calls.filter(c => c[0]==='rect' && c[3]===620).length>=4);
+  assert.ok(calls.filter(c => c[0]==='rect' && c[3]===540).length>=2);
   assert.ok(calls.some(c => c[0]==='move' && c[1]===590));
  } finally { globalThis.document=previousDocument; globalThis.Image=previousImage; }
 });

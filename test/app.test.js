@@ -112,12 +112,13 @@ test('invoice appearance and Bale token are saved without exposing the token', a
  assert.equal((await request('/settings')).result.seal_scale,170);
  assert.equal((await request('/session')).result.login_theme,'ledger');
  const token = '123456789:abcdefghijklmnopqrstuvwxyz123456';
- assert.equal((await request('/integrations/bale','PUT',{token})).status,200);
+ assert.equal((await request('/integrations/bale','PUT',{token,chat_id:'123456789'})).status,200);
  const visible = (await request('/settings')).result;
  assert.equal(visible.bale_configured,true);
+ assert.equal(visible.bale_chat_id,'123456789');
  assert.ok(!JSON.stringify(visible).includes(token));
  assert.ok(!JSON.stringify((await request('/invoices')).result).includes(token));
- assert.equal((await request('/invoices/'+invoiceId+'/bale','POST',{}, {headers:{'X-Bale-Chat':'123456789'}})).status,400);
+ assert.equal((await request('/invoices/'+invoiceId+'/bale','POST',{})).status,400);
  assert.equal((await request('/integrations/bale','DELETE')).status,200);
 });
 test('service price changes do not rewrite issued invoice lines', async () => {
