@@ -106,6 +106,20 @@ test('invoice arithmetic is calculated on server and validation is atomic', asyn
  assert.equal(i.seller_snapshot.seal_id,sealId);
  assert.equal((await request('/customers/'+customerId,'DELETE')).status,400);
 });
+test('invoice appearance and Bale token are saved without exposing the token', async () => {
+ const settings = (await request('/settings')).result;
+ assert.equal((await request('/settings','PUT',{...settings,seal_scale:170,login_theme:'ledger'})).status,200);
+ assert.equal((await request('/settings')).result.seal_scale,170);
+ assert.equal((await request('/session')).result.login_theme,'ledger');
+ const token = '123456789:abcdefghijklmnopqrstuvwxyz123456';
+ assert.equal((await request('/integrations/bale','PUT',{token})).status,200);
+ const visible = (await request('/settings')).result;
+ assert.equal(visible.bale_configured,true);
+ assert.ok(!JSON.stringify(visible).includes(token));
+ assert.ok(!JSON.stringify((await request('/invoices')).result).includes(token));
+ assert.equal((await request('/invoices/'+invoiceId+'/bale','POST',{}, {headers:{'X-Bale-Chat':'123456789'}})).status,400);
+ assert.equal((await request('/integrations/bale','DELETE')).status,200);
+});
 test('service price changes do not rewrite issued invoice lines', async () => {
  const id = (await request('/services','POST',{name:'طراحی نرم‌افزار',price:1000000})).result.id;
  assert.equal((await request('/services/'+id,'PUT',{name:'طراحی نرم‌افزار',price:2000000})).status,200);

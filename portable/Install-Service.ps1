@@ -51,8 +51,8 @@ if (-not $Upgrade) {
 }
 Start-Service -Name $serviceName
 $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Vandar.lnk'))
-$shortcut.TargetPath = $browser
-$shortcut.Arguments = if ($browser -like '*msedge.exe') { '--kiosk http://localhost:17432 --edge-kiosk-type=fullscreen --no-first-run' } else { '--kiosk http://localhost:17432' }
+$shortcut.TargetPath = Join-Path $target 'VandarWindow.exe'
+$shortcut.Arguments = 'http://localhost:17432'
 $shortcut.WorkingDirectory = $target
 $shortcut.IconLocation = (Join-Path $target 'Vandar.ico')
 $shortcut.Save()

@@ -37,7 +37,10 @@ if (!db.prepare('PRAGMA table_info(invoices)').all().some(c => c.name === 'selle
 const app = express();
 if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === 'logo_id')) db.exec("ALTER TABLE settings ADD COLUMN logo_id TEXT NOT NULL DEFAULT ''");
 if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === 'seal_id')) db.exec("ALTER TABLE settings ADD COLUMN seal_id TEXT NOT NULL DEFAULT ''");
+if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === 'seal_scale')) db.exec("ALTER TABLE settings ADD COLUMN seal_scale INTEGER NOT NULL DEFAULT 100");
+if (!db.prepare('PRAGMA table_info(settings)').all().some(c => c.name === 'login_theme')) db.exec("ALTER TABLE settings ADD COLUMN login_theme TEXT NOT NULL DEFAULT 'bazaar'");
 db.exec('CREATE TABLE IF NOT EXISTS logos (id TEXT PRIMARY KEY, image BLOB NOT NULL)');
+db.exec('CREATE TABLE IF NOT EXISTS integrations (name TEXT PRIMARY KEY, value TEXT NOT NULL)');
 const production = process.env.NODE_ENV === 'production';
 const origin = process.env.PUBLIC_ORIGIN || 'http://localhost:3000';
 if (production && !origin.startsWith('https://')) throw new Error('PUBLIC_ORIGIN must be an https URL in production');
@@ -46,7 +49,8 @@ app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'"], styleSrcAttr: ["'unsafe-inline'"], fontSrc: ["'self'"], imgSrc: ["'self'", 'data:'], connectSrc: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], upgradeInsecureRequests: production ? [] : null } }, strictTransportSecurity: production ? undefined : false }));
 app.use('/api', rateLimit({ windowMs: 60000, limit: 240, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/logo', express.json({ limit: '3mb' }));
-app.use('/api/seal', express.json({ limit: '3mb' }));
+app.use('/api/seal', express.json({ limit: '40mb' }));
+app.use('/api/invoices/:id/bale', express.raw({ type:'application/pdf', limit:'20mb' }));
 app.use(express.json({ limit: '256kb' }));
 const query = (sql, ...args) => db.prepare(sql).all(...args);
 const one = (sql, ...args) => db.prepare(sql).get(...args);
@@ -80,30 +84,40 @@ const csrf = (req, res, next) => { if (!equal(req.get('X-CSRF-Token'), req.sessi
 const loginLimit = rateLimit({ windowMs: 15 * 60000, limit: 10, skipSuccessfulRequests: true, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'تلاش‌های زیادی انجام شده؛ ۱۵ دقیقه دیگر امتحان کنید.' } });
 let setupToken = process.env.SETUP_TOKEN || token();
 if (!one('SELECT id FROM users')) console.log(`First-run setup token: ${setupToken}`);
-app.get('/api/session', (req, res) => { const user = one('SELECT email,name,totp FROM users'); res.json({ setup: !user, authenticated: Boolean(req.session?.authenticated), pending: Boolean(req.session && !req.session.authenticated), csrf: req.session?.csrf || null, user: req.session?.authenticated ? { email: user.email, name: user.name, twoFactor: Boolean(user.totp) } : null }); });
+app.get('/api/session', (req, res) => { const user = one('SELECT email,name,totp FROM users'); res.json({ setup: !user, authenticated: Boolean(req.session?.authenticated), pending: Boolean(req.session && !req.session.authenticated), csrf: req.session?.csrf || null, login_theme: one('SELECT login_theme FROM settings').login_theme, user: req.session?.authenticated ? { email: user.email, name: user.name, twoFactor: Boolean(user.totp) } : null }); });
 app.post('/api/setup', loginLimit, (req, res) => { if (one('SELECT id FROM users')) fail('حساب قبلاً ساخته شده است.', 409); if (!equal(req.body.token, setupToken)) fail('کد راه‌اندازی معتبر نیست.', 403); const email = text(req.body.email, 200, true); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('ایمیل معتبر نیست.'); run('INSERT INTO users(id,email,name,password) VALUES(1,?,?,?)', email.toLowerCase(), text(req.body.name, 100, true), passwordHash(validatePassword(req.body.password))); setupToken = ''; const setupFile = join(data, 'setup-token.txt'); if (process.env.PORTABLE_CONTROL === '1' && existsSync(setupFile)) unlinkSync(setupFile); audit('ایجاد حساب مدیر'); res.json({ csrf: setSession(res, true) }); });
 app.post('/api/login', loginLimit, (req, res) => { const email = text(req.body.email, 200); const password = passwordText(req.body.password); const user = one('SELECT * FROM users'); const stored = user?.password || '00000000000000000000000000000000:' + '0'.repeat(128); const ok = passwordOK(password, stored); if (!user || user.email !== email.toLowerCase() || !ok) fail('ایمیل یا گذرواژه نادرست است.', 401); if (req.session) run('DELETE FROM sessions WHERE token=?', req.session.token); audit('ورود با گذرواژه'); res.json({ pending: Boolean(user.totp), csrf: setSession(res, !user.totp) }); });
 app.post('/api/login/verify', loginLimit, csrf, (req, res) => { if (!req.session || req.session.authenticated) fail('نشست ورود معتبر نیست.', 401); const user = one('SELECT * FROM users'); const code = text(req.body.code, 40, true); const step = validStep(decrypt(user.totp), code, user.last_step); const codes = JSON.parse(user.recovery); const index = codes.findIndex(c => equal(c, hash(code))); if (!step && index < 0) fail('کد ورود معتبر نیست.', 401); transaction(() => { if (step) run('UPDATE users SET last_step=?', step); else { codes.splice(index, 1); run('UPDATE users SET recovery=?', JSON.stringify(codes)); } run('DELETE FROM sessions WHERE token=?', req.session.token); audit('ورود دومرحله‌ای'); }); res.json({ csrf: setSession(res, true) }); });
 app.use('/api', (req, res, next) => { if (['/session','/login','/login/verify','/setup'].includes(req.path)) return next(); auth(req, res, () => ['GET','HEAD'].includes(req.method) ? next() : csrf(req, res, next)); });
 app.post('/api/logout', (req, res) => { run('DELETE FROM sessions WHERE token=?', req.session.token); res.clearCookie('ips_session', { path: '/', secure: production, sameSite: 'strict' }); res.json({ ok: true }); });
+app.post('/api/window/close', async (req, res) => {
+ if (process.env.PORTABLE_CONTROL !== '1') fail('خروج از پنجره فقط در نسخهٔ ویندوزی فعال است.',409);
+ let result;
+ try { result = await fetch('http://127.0.0.1:17433/close',{method:'POST',signal:AbortSignal.timeout(3000)}); }
+ catch { fail('پنجره از میانبر وَندار باز نشده است؛ از Alt+F4 استفاده کنید.',409); }
+ if (!result.ok) fail('بستن پنجره انجام نشد.',502);
+ run('DELETE FROM sessions WHERE token=?',req.session.token);
+ res.clearCookie('ips_session',{path:'/',secure:production,sameSite:'strict'});
+ res.json({ok:true});
+});
 app.post('/api/security/totp/start', loginLimit, async (req, res) => { const user = one('SELECT * FROM users'); if (!passwordOK(passwordText(req.body.password), user.password)) fail('گذرواژه نادرست است.', 403); if (user.totp) fail('ورود دومرحله‌ای فعال است.'); const secret = base32(randomBytes(20)); run('UPDATE sessions SET pending_totp=? WHERE token=?', encrypt(secret), req.session.token); const uri = `otpauth://totp/${encodeURIComponent('IPS Factor:' + user.email)}?secret=${secret}&issuer=IPS%20Factor&algorithm=SHA1&digits=6&period=30`; res.json({ secret, qr: await QRCode.toDataURL(uri) }); });
 app.post('/api/security/totp/enable', loginLimit, (req, res) => { if (one('SELECT totp FROM users').totp) fail('ورود دومرحله‌ای قبلاً فعال شده است.'); if (!req.session.pending_totp) fail('ابتدا راه‌اندازی دومرحله‌ای را آغاز کنید.'); const step = validStep(decrypt(req.session.pending_totp), text(req.body.code, 6, true)); if (!step) fail('کد معتبر نیست.'); const codes = Array.from({ length: 8 }, () => randomBytes(6).toString('hex')); transaction(() => { run('UPDATE users SET totp=?,last_step=?,recovery=?', req.session.pending_totp, step, JSON.stringify(codes.map(hash))); run('DELETE FROM sessions WHERE token<>?', req.session.token); run('UPDATE sessions SET pending_totp=NULL WHERE token=?', req.session.token); audit('فعال‌سازی ورود دومرحله‌ای'); }); res.json({ codes }); });
 app.post('/api/security/password', loginLimit, (req, res) => { const user = one('SELECT * FROM users'); if (!passwordOK(passwordText(req.body.current), user.password)) fail('گذرواژه فعلی نادرست است.', 403); run('UPDATE users SET password=?', passwordHash(validatePassword(req.body.password))); run('DELETE FROM sessions WHERE token<>?', req.session.token); audit('تغییر گذرواژه'); res.json({ ok: true }); });
-app.get('/api/settings', (req, res) => res.json(one('SELECT * FROM settings')));
+app.get('/api/settings', (req, res) => res.json({ ...one('SELECT * FROM settings'), bale_configured: Boolean(one("SELECT name FROM integrations WHERE name='bale'")) }));
 async function saveImage(req, res, seal = false) {
- const value = text(req.body.image, 2800000, true);
+ const value = text(req.body.image, seal ? 40*1024*1024 : 2800000, true);
  const match = value.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
  if (!match || (seal && match[1] === 'jpeg')) fail(seal ? 'برای مهر و امضا تصویر PNG یا WebP شفاف انتخاب کنید.' : 'لوگو باید تصویر PNG، JPEG یا WebP باشد.');
  const bytes = Buffer.from(match[2], 'base64');
- if (bytes.length > 2*1024*1024) fail('حداکثر اندازه تصویر ۲ مگابایت است.');
+ if (!seal && bytes.length > 2*1024*1024) fail('حداکثر اندازه لوگو ۲ مگابایت است.');
  let image;
  try {
-  const source = sharp(bytes, { limitInputPixels:10000000, animated:false, failOn:'warning' });
+  const source = sharp(bytes, { limitInputPixels:seal ? undefined : 10000000, animated:false, failOn:'warning' });
   const metadata = await source.metadata();
   if (!['png','jpeg','webp'].includes(metadata.format) || (metadata.pages || 1) > 1 || (seal && !metadata.hasAlpha)) fail('برای مهر و امضا تصویر ثابت با زمینه شفاف انتخاب کنید.');
-  image = await source.rotate().resize({ width:1024,height:1024,fit:'inside',withoutEnlargement:true }).png().toBuffer();
- } catch { fail('فایل تصویر معتبر نیست؛ از یک تصویر ثابت تا ۱۰ میلیون پیکسل استفاده کنید.'); }
- if (image.length > 4*1024*1024) fail('تصویر نهایی بزرگ است؛ یک لوگوی کوچک‌تر انتخاب کنید.');
+  image = await source.rotate().resize({ width:seal ? 2048 : 1024,height:seal ? 2048 : 1024,fit:'inside',withoutEnlargement:true }).png().toBuffer();
+ } catch { fail('فایل تصویر معتبر نیست؛ از یک تصویر ثابت استفاده کنید.'); }
+ if (!seal && image.length > 4*1024*1024) fail('تصویر نهایی بزرگ است؛ یک لوگوی کوچک‌تر انتخاب کنید.');
  const id = createHash('sha256').update(image).digest('hex');
  transaction(() => { run('INSERT OR IGNORE INTO logos(id,image) VALUES(?,?)',id,image); run(`UPDATE settings SET ${seal ? 'seal_id' : 'logo_id'}=?`,id); audit(seal ? 'تغییر مهر و امضا' : 'تغییر لوگوی کسب‌وکار'); });
  res.json({ id });
@@ -115,7 +129,9 @@ app.delete('/api/logo', (req, res) => { run("UPDATE settings SET logo_id=''"); a
 app.delete('/api/seal', (req, res) => { run("UPDATE settings SET seal_id=''"); audit('حذف مهر و امضای فعلی'); res.json({ ok:true }); });
 app.get('/api/logo/:id', (req, res) => { if (!/^[a-f0-9]{64}$/.test(req.params.id)) fail('لوگو پیدا نشد.',404); const logo = one('SELECT image FROM logos WHERE id=?',req.params.id); if (!logo) fail('لوگو پیدا نشد.',404); res.type('image/png').send(Buffer.from(logo.image)); });
 app.get('/api/invoices/:id/qr', async (req, res) => { const i = one('SELECT number,date,total,customer_snapshot,seller_snapshot FROM invoices WHERE id=?', req.params.id); if (!i) fail('فاکتور پیدا نشد.', 404); const seller = JSON.parse(i.seller_snapshot || '{}'); const summary = [`${seller.business || ''} | ${i.number}`, JSON.parse(i.customer_snapshot).name, `${formatPersianDate(i.date)} | ${i.total}`, seller.iban ? `IBAN ${seller.iban}` : ''].filter(Boolean).join('\n'); res.type('image/png').set('Cache-Control','no-store').send(await QRCode.toBuffer(summary, { margin:1, width:320, errorCorrectionLevel:'M' })); });
-app.put('/api/settings', (req, res) => { const b = req.body; const prefix = text(b.invoice_prefix, 15, true); if (!/^[A-Za-z0-9-]+$/.test(prefix)) fail('پیشوند فقط شامل حروف انگلیسی، عدد و خط تیره باشد.'); run('UPDATE settings SET business=?,owner=?,phone=?,address=?,iban=?,invoice_prefix=?,template=?', text(b.business, 150, true), text(b.owner, 100), text(b.phone, 40), text(b.address, 500), text(b.iban, 50), prefix, choice(b.template, invoiceTemplates)); audit('ویرایش تنظیمات'); res.json({ ok: true }); });
+app.put('/api/settings', (req, res) => { const b = req.body; const prefix = text(b.invoice_prefix, 15, true); if (!/^[A-Za-z0-9-]+$/.test(prefix)) fail('پیشوند فقط شامل حروف انگلیسی، عدد و خط تیره باشد.'); run('UPDATE settings SET business=?,owner=?,phone=?,address=?,iban=?,invoice_prefix=?,template=?,seal_scale=?,login_theme=?', text(b.business, 150, true), text(b.owner, 100), text(b.phone, 40), text(b.address, 500), text(b.iban, 50), prefix, choice(b.template, invoiceTemplates), integer(Number(b.seal_scale ?? 100),40,200), choice(b.login_theme || 'bazaar',['bazaar','invoice','ledger'])); audit('ویرایش تنظیمات'); res.json({ ok: true }); });
+app.put('/api/integrations/bale', (req, res) => { const botToken = text(req.body.token, 200, true); if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(botToken)) fail('توکن بازوی بله معتبر نیست.'); run("INSERT INTO integrations(name,value) VALUES('bale',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",encrypt(botToken)); audit('تنظیم بازوی بله'); res.json({ ok:true }); });
+app.delete('/api/integrations/bale', (req, res) => { run("DELETE FROM integrations WHERE name='bale'"); audit('حذف اتصال بله'); res.json({ ok:true }); });
 const customerList = () => query("SELECT c.*,COALESCE((SELECT SUM(i.total) FROM invoices i WHERE i.customer_id=c.id AND i.status='issued' AND i.kind='invoice'),0)-COALESCE((SELECT SUM(t.amount) FROM transactions t JOIN invoices i ON i.id=t.invoice_id WHERE i.customer_id=c.id),0) AS balance FROM customers c ORDER BY c.id DESC");
 app.get('/api/customers', (req, res) => res.json(customerList()));
 function customerValues(b) { const email = text(b.email, 200); if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('ایمیل معتبر نیست.'); return [text(b.name, 150, true), text(b.company, 150), email, phone(b.phone), text(b.national_id, 40), text(b.address, 500), text(b.notes, 2000)]; }
@@ -129,6 +145,28 @@ app.put('/api/services/:id', (req, res) => { const id = integer(Number(req.param
 app.delete('/api/services/:id', (req, res) => { const id = integer(Number(req.params.id), 1); const r = run('DELETE FROM services WHERE id=?', id); if (!r.changes) fail('خدمت پیدا نشد.', 404); audit('حذف خدمت', String(id)); res.json({ ok: true }); });
 const invoices = () => query(`SELECT i.*,c.name AS customer_name,COALESCE((SELECT SUM(amount) FROM transactions WHERE invoice_id=i.id),0) AS paid FROM invoices i JOIN customers c ON c.id=i.customer_id ORDER BY i.id DESC`).map(i => ({ ...i, items: JSON.parse(i.items), customer_snapshot: JSON.parse(i.customer_snapshot), seller_snapshot: JSON.parse(i.seller_snapshot) }));
 app.get('/api/invoices', (req, res) => res.json(invoices()));
+app.post('/api/invoices/:id/bale', async (req, res) => {
+ const invoice = one('SELECT number,kind,date,status FROM invoices WHERE id=?', integer(Number(req.params.id),1));
+ if (!invoice) fail('سند پیدا نشد.',404);
+ if (invoice.status !== 'issued') fail('ابتدا سند را صادر کنید.');
+ const integration = one("SELECT value FROM integrations WHERE name='bale'");
+ if (!integration) fail('ابتدا توکن بازوی بله را در تنظیمات ثبت کنید.');
+ const chatId = String(req.get('X-Bale-Chat') || '').trim();
+ if (!/^-?\d{5,20}$/.test(chatId)) fail('شناسه گفت‌وگوی بله معتبر نیست.');
+ if (!Buffer.isBuffer(req.body) || req.body.length < 100 || req.body.length > 20*1024*1024 || req.body.subarray(0,5).toString() !== '%PDF-') fail('فایل PDF معتبر نیست.');
+ const form = new FormData();
+ form.set('chat_id',chatId);
+ form.set('caption',`${{invoice:'فاکتور فروش',proforma:'پیش‌فاکتور',quote:'پیشنهاد قیمت'}[invoice.kind]} ${invoice.number} · ${formatPersianDate(invoice.date)}`);
+ form.set('document',new Blob([req.body],{type:'application/pdf'}),`Vandar-${invoice.number}.pdf`);
+ let response, result;
+ try {
+  response = await fetch(`https://tapi.bale.ai/bot${decrypt(integration.value)}/sendDocument`,{method:'POST',body:form,signal:AbortSignal.timeout(60000)});
+  result = await response.json();
+ } catch { fail('ارتباط با بله برقرار نشد. وضعیت اینترنت و بازو را بررسی کنید.',502); }
+ if (!response.ok || !result.ok) fail('ارسال در بله انجام نشد. شناسه گفت‌وگو و دسترسی بازو را بررسی کنید.',502);
+ audit('ارسال سند با بله',`${invoice.number} → ${chatId}`);
+ res.json({ok:true});
+});
 function invoiceValues(b) { const customer = one('SELECT * FROM customers WHERE id=?', integer(b.customer_id, 1)); if (!customer) fail('مشتری پیدا نشد.'); if (!Array.isArray(b.items) || !b.items.length || b.items.length > 100) fail('فاکتور باید بین ۱ تا ۱۰۰ ردیف داشته باشد.'); const items = b.items.map(i => ({ description: text(i.description, 500, true), quantity: integer(i.quantity, 1, 1000000), price: integer(i.price, 0, 1e12) })); const subtotal = integer(items.reduce((sum, i) => sum + i.quantity * i.price, 0), 0, 1e14); const discount = integer(b.discount, 0, subtotal); const taxRate = integer(b.tax_rate, 0, 100); const tax = Math.round((subtotal - discount) * taxRate / 100); const total = integer(subtotal - discount + tax, 1, 1e14); const start = date(b.date); const due = date(b.due_date); if (due < start) fail('سررسید نمی‌تواند پیش از تاریخ صدور باشد.'); return [customer.id, JSON.stringify(customer), choice(b.kind, ['invoice','proforma','quote']), choice(b.status, ['draft','issued']), start, due, JSON.stringify(items), discount, taxRate, subtotal, tax, total, text(b.notes, 4000), choice(b.template, invoiceTemplates)]; }
 app.post('/api/invoices', (req, res) => { const values = invoiceValues(req.body); const id = transaction(() => { const prefix = one('SELECT invoice_prefix FROM settings').invoice_prefix; const seq = Number(one('SELECT COALESCE(MAX(id),0)+1 AS n FROM invoices').n); const r = run('INSERT INTO invoices(number,customer_id,customer_snapshot,kind,status,date,due_date,items,discount,tax_rate,subtotal,tax,total,notes,template,seller_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', `${prefix}-${String(seq).padStart(5, '0')}`, ...values, JSON.stringify(one('SELECT * FROM settings'))); audit('ثبت فاکتور', String(r.lastInsertRowid)); return Number(r.lastInsertRowid); }); res.json({ id }); });
 app.put('/api/invoices/:id', (req, res) => { const values = invoiceValues(req.body); transaction(() => { const current = one('SELECT * FROM invoices WHERE id=?', req.params.id); if (!current) fail('فاکتور پیدا نشد.', 404); if (current.status === 'void' || one('SELECT id FROM transactions WHERE invoice_id=?', current.id)) fail('فاکتور باطل یا دارای دریافت قابل ویرایش نیست.'); if (current.version !== req.body.version) fail('فاکتور تغییر کرده؛ صفحه را تازه کنید.', 409); run('UPDATE invoices SET customer_id=?,customer_snapshot=?,kind=?,status=?,date=?,due_date=?,items=?,discount=?,tax_rate=?,subtotal=?,tax=?,total=?,notes=?,template=?,version=version+1 WHERE id=?', ...values, current.id); audit('ویرایش فاکتور', req.params.id); }); res.json({ ok: true }); });

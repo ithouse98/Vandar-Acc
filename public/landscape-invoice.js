@@ -8,7 +8,7 @@ const info = (title, rows) => `<section class="landscape-party"><h3>${title}</h3
 export function landscapeInvoice(invoice, seller) {
  const customer = invoice.customer_snapshot;
  return `<article class="invoice-preview landscape">
- <header class="landscape-head"><div><p>شماره سریال: <b dir="ltr">${esc(invoice.number)}</b></p><p>تاریخ: ${formatPersianDate(invoice.date)}</p></div><h2>صورتحساب فروش خدمات</h2><span>${esc(({invoice:'فاکتور فروش',proforma:'پیش‌فاکتور',quote:'پیشنهاد قیمت'})[invoice.kind])}</span></header>
+ <header class="landscape-head"><div><p>شماره سریال: <b dir="ltr">${esc(invoice.number)}</b></p><p>تاریخ: ${formatPersianDate(invoice.date)}</p></div><h2>${esc(({invoice:'فاکتور فروش',proforma:'پیش‌فاکتور',quote:'پیشنهاد قیمت'})[invoice.kind])}</h2><span>صورتحساب فروش خدمات</span></header>
  ${info('مشخصات فروشنده', [['نام شخص / کسب‌وکار',seller.business],['نام مسئول',seller.owner],['نشانی',seller.address],['شماره تماس',seller.phone]])}
  ${info('مشخصات خریدار', [['نام شخص / شرکت',customer.name],['شرکت',customer.company],['شناسه ملی / اقتصادی',customer.national_id],['نشانی',customer.address],['موبایل',customer.phone]])}
  <section class="landscape-lines"><h3>مشخصات خدمات مورد معامله</h3><table><thead><tr><th>ردیف</th><th>شرح خدمات</th><th>تعداد</th><th>واحد</th><th>قیمت واحد (تومان)</th><th>مبلغ (تومان)</th></tr></thead><tbody>${invoice.items.map((item,index) => `<tr><td>${fa(index+1)}</td><td>${esc(item.description)}</td><td>${fa(item.quantity)}</td><td>خدمت</td><td>${fa(item.price)}</td><td>${fa(item.quantity*item.price)}</td></tr>`).join('')}</tbody></table></section>

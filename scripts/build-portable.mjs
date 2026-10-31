@@ -30,6 +30,8 @@ const compiled = spawnSync(compiler, ['/nologo', '/target:winexe', '/codepage:65
 if (compiled.status !== 0) throw new Error('Tray application compilation failed');
 const service = spawnSync(compiler, ['/nologo', '/target:exe', '/codepage:65001', `/out:${join(output, 'VandarService.exe')}`, `/win32icon:${join(root, 'portable', 'Vandar.ico')}`, '/reference:System.dll', '/reference:System.ServiceProcess.dll', join(root, 'portable', 'Service.cs')], { stdio: 'inherit' });
 if (service.status !== 0) throw new Error('Windows service compilation failed');
+const window = spawnSync(compiler, ['/nologo', '/target:winexe', '/codepage:65001', `/out:${join(output, 'VandarWindow.exe')}`, `/win32icon:${join(root, 'portable', 'Vandar.ico')}`, '/reference:System.dll', '/reference:System.Windows.Forms.dll', join(root, 'portable', 'Window.cs')], { stdio: 'inherit' });
+if (window.status !== 0) throw new Error('Window launcher compilation failed');
 const targetData = join(output, 'data');
 await mkdir(targetData);
 if (existing.includes('accounting.sqlite')) {

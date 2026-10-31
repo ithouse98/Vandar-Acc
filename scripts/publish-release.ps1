@@ -32,7 +32,7 @@ try {
   try {
     $entries = @($archive.Entries.FullName | ForEach-Object { $_ -replace '\\', '/' })
     if ($entries | Where-Object { $_ -match '/data/.+' -and $_ -notmatch '/data/$' }) { throw 'Release ZIP contains private data.' }
-    foreach ($item in @('Vandar.exe','VandarService.exe','Vandar.ico','Install-Service.ps1','Uninstall-Service.ps1','recover-admin.js','NODE-LICENSE.txt','server.js','vandar-icon.svg')) {
+    foreach ($item in @('Vandar.exe','VandarService.exe','VandarWindow.exe','Vandar.ico','Install-Service.ps1','Uninstall-Service.ps1','recover-admin.js','NODE-LICENSE.txt','server.js','vandar-icon.svg')) {
       if (-not ($entries | Where-Object { $_ -like "*/$item" })) { throw "Release ZIP is missing $item." }
     }
   } finally { $archive.Dispose() }

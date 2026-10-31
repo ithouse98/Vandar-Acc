@@ -109,12 +109,7 @@ internal sealed class VandarTray : ApplicationContext
         if (!ready) return;
         try
         {
-            string edge = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Microsoft", "Edge", "Application", "msedge.exe");
-            if (!File.Exists(edge)) edge = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft", "Edge", "Application", "msedge.exe");
-            string chrome = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Google", "Chrome", "Application", "chrome.exe");
-            if (File.Exists(edge)) Process.Start(new ProcessStartInfo(edge, "--kiosk " + url + " --edge-kiosk-type=fullscreen --no-first-run") { UseShellExecute = true });
-            else if (File.Exists(chrome)) Process.Start(new ProcessStartInfo(chrome, "--kiosk " + url) { UseShellExecute = true });
-            else Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VandarWindow.exe"), url) { UseShellExecute = false });
         }
         catch { icon.ShowBalloonTip(3000, "وَندار", "مرورگر باز نشد؛ نشانی صفحه را از منو کپی کنید.", ToolTipIcon.Warning); }
     }
