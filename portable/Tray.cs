@@ -4,8 +4,12 @@ using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
+
+[assembly: AssemblyCompany("Behrouz Kazemi - IPS-Co")]
+[assembly: AssemblyCopyright("Copyright © Behrouz Kazemi - IPS-Co 2026")]
 
 internal static class Program
 {

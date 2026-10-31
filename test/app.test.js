@@ -33,6 +33,8 @@ after(async () => { if (child && child.exitCode === null) { child.kill(); await 
 test('private APIs reject unauthenticated access and assets carry security headers', async () => {
  assert.equal((await request('/customers')).status,401);
  assert.equal((await request('/services')).status,401);
+ assert.equal((await request('/window/close','POST',{}, {session:false})).status,409);
+ assert.equal((await request('/window/close','POST',{}, {session:false,headers:{Origin:'https://evil.example'}})).status,403);
  const res = await fetch(origin);
  assert.equal(res.status,200); assert.match(res.headers.get('content-security-policy'),/script-src 'self'/); assert.equal(res.headers.get('x-frame-options'),'SAMEORIGIN');
  assert.equal((await fetch(origin+'/fonts/Vazirmatn%5Bwght%5D.woff2')).status,200);

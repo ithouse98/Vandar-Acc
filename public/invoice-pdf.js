@@ -110,13 +110,15 @@ export async function createInvoicePdf(invoice, seller) {
   rule(220);
   const partyTop = 242;
   y = partyTop + 39;
-  text('فروشنده', 1170, y, 23, true);
-  text('خریدار', 590, y, 23, true);
-  y = Math.max(wrap([seller.business,seller.phone,seller.address].filter(Boolean).join(' · '), 1170, y+36, 500, 21, 31), wrap([customer.name,customer.company,customer.phone,customer.address].filter(Boolean).join(' · '), 590, y+36, 360, 21, 31),partyTop+150);
-  const partyBottom = y + 10;
+  text('فروشنده', 1140, y, 23, true);
+  text('خریدار', 580, y, 23, true);
+  y = Math.max(wrap([seller.business,seller.phone,seller.address].filter(Boolean).join(' · '), 1140, y+36, 470, 21, 31), wrap([customer.name,customer.company,customer.phone,customer.address].filter(Boolean).join(' · '), 580, y+36, 340, 21, 31),partyTop+150);
+  const partyBottom = y + 20;
   ctx.strokeStyle = '#60766a'; ctx.lineWidth = 2;
+  ctx.setLineDash([10,7]);
   ctx.strokeRect(630,partyTop,540,partyBottom-partyTop);
   ctx.strokeRect(70,partyTop,540,partyBottom-partyTop);
+  ctx.setLineDash([]);
   image(qr, 205, partyTop+45, 105, 105);
   y = partyBottom + 37;
   text(`تاریخ صدور: ${formatPersianDate(invoice.date)}     سررسید: ${formatPersianDate(invoice.due_date)}`, 1170, y, 22);
@@ -187,14 +189,16 @@ export async function createInvoicePdf(invoice, seller) {
   if (invoice.notes) await paragraph(invoice.notes);
   if (seller.iban) await paragraph(`اطلاعات پرداخت: ${seller.iban}`);
   const sealScale = Math.min(2,Math.max(.4,Number(seller.seal_scale || 100)/100));
-  const signatureHeight = Math.max(160,55+130*sealScale);
+  const signatureHeight = Math.max(170,75+130*sealScale);
   if (y + signatureHeight > 1600) { await finish(); fresh(); }
   ctx.strokeStyle = '#60766a'; ctx.lineWidth = 2;
+  ctx.setLineDash([10,7]);
   ctx.strokeRect(650,y-8,520,signatureHeight);
   ctx.strokeRect(70,y-8,520,signatureHeight);
-  text('مهر و امضای فروشنده', 1170, y + 25, 22, true);
-  image(seal, 1170, y + 40, 270*sealScale, 130*sealScale);
-  text('امضای خریدار', 570, y + 25, 22, true);
+  ctx.setLineDash([]);
+  text('مهر و امضای فروشنده', 1140, y + 27, 22, true);
+  image(seal, 1140, y + 47, Math.min(270*sealScale,460), 130*sealScale);
+  text('امضای خریدار', 560, y + 27, 22, true);
   await finish();
   return jpegPagesToPdf(images);
 }
@@ -221,6 +225,7 @@ async function createLandscapePdf(invoice, seller) {
   const font = (size = 23, bold = false) => { ctx.font = `${bold ? 700 : 400} ${size}px Vazirmatn, Tahoma, sans-serif`; ctx.fillStyle = '#111'; };
   const text = (value, x, top, size = 23, bold = false) => { font(size,bold); ctx.fillText(String(value ?? ''),x,top); };
   const rect = (x, top, width, height) => { ctx.strokeStyle = '#222'; ctx.lineWidth = 2; ctx.strokeRect(x,top,width,height); };
+  const dashedRect = (x, top, width, height) => { ctx.setLineDash([10,7]); rect(x,top,width,height); ctx.setLineDash([]); };
   const line = (x1, top, x2) => { ctx.beginPath();ctx.moveTo(x1,top);ctx.lineTo(x2,top);ctx.stroke(); };
   const start = (first = false) => {
     ctx.fillStyle = '#fff'; ctx.fillRect(0,0,1754,1240);
@@ -233,11 +238,11 @@ async function createLandscapePdf(invoice, seller) {
       text(`تاریخ: ${formatPersianDate(invoice.date)}`,70,108,24);
       ctx.textAlign = 'right';
       const party = (title, lines, top) => {
-        rect(70,top,1614,113);
+        dashedRect(70,top,1614,113);
         text(title,1000,top+30,25,true);
         line(70,top+40,1684);
-        text(lines[0],1655,top+71,22);
-        text(lines[1],1655,top+100,20);
+        text(lines[0],1640,top+71,22);
+        text(lines[1],1640,top+100,20);
       };
       party('مشخصات فروشنده',[`نام: ${seller.business}    مسئول: ${seller.owner || '—'}    تلفن: ${seller.phone || '—'}`,`نشانی: ${seller.address || '—'}`],145);
       party('مشخصات خریدار',[`نام: ${customer.name}    شرکت: ${customer.company || '—'}    موبایل: ${customer.phone || '—'}`,`شناسه: ${customer.national_id || '—'}    نشانی: ${customer.address || '—'}`],266);
@@ -295,9 +300,9 @@ async function createLandscapePdf(invoice, seller) {
   const sealScale = Math.min(2,Math.max(.4,Number(seller.seal_scale || 100)/100));
   const signatureHeight = Math.max(115,55+73*sealScale);
   if (y + signatureHeight > 1160) { await finish(); start(); }
-  rect(70,y,807,signatureHeight); rect(877,y,807,signatureHeight);
-  text('مهر و امضای فروشنده',1660,y+32,23,true);
-  if (seal) { const scale=Math.min(220*sealScale/seal.width,73*sealScale/seal.height); ctx.drawImage(seal,1650-seal.width*scale,y+38,seal.width*scale,seal.height*scale); }
+  dashedRect(70,y,807,signatureHeight); dashedRect(877,y,807,signatureHeight);
+  text('مهر و امضای فروشنده',1640,y+32,23,true);
+  if (seal) { const scale=Math.min(220*sealScale/seal.width,73*sealScale/seal.height); ctx.drawImage(seal,1640-seal.width*scale,y+42,seal.width*scale,seal.height*scale); }
   text('مهر و امضای خریدار',850,y+32,23,true);
   await finish();
   return jpegPagesToPdf(pages,1754,1240,true);

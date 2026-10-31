@@ -21,7 +21,8 @@ test('PDF pages center the document title and draw a full item grid', async () =
  const context = {
   direction:'rtl',textAlign:'right',
   fillRect(){},beginPath(){},moveTo(x,y){ calls.push(['move',x,y]); },lineTo(){},stroke(){},
-  strokeRect(x,y,w,h){ calls.push(['rect',x,y,w,h]); },drawImage(){},
+  setLineDash(pattern){ this.dash=pattern.length>0; },
+  strokeRect(x,y,w,h){ calls.push(['rect',x,y,w,h,this.dash]); },drawImage(){},
   measureText(value){ return {width:String(value).length*10}; },
   fillText(value,x,y){ calls.push(['text',value,x,y,this.textAlign]); }
  };
@@ -36,6 +37,12 @@ test('PDF pages center the document title and draw a full item grid', async () =
   assert.ok(calls.filter(c => c[0]==='rect' && c[3]===1100).length>=2);
   assert.ok(calls.filter(c => c[0]==='rect' && c[3]===620).length>=4);
   assert.ok(calls.filter(c => c[0]==='rect' && c[3]===540).length>=2);
+  assert.equal(calls.filter(c => c[0]==='rect' && [540,520].includes(c[3])).length,4);
+  assert.ok(calls.filter(c => c[0]==='rect' && [540,520].includes(c[3])).every(c => c[5]));
+  assert.ok(calls.some(c => c[0]==='text' && c[1]==='فروشنده' && c[2]===1140));
   assert.ok(calls.some(c => c[0]==='move' && c[1]===590));
+  calls.length=0;
+  await createInvoicePdf({...invoice,template:'landscape'},{business:'فروشنده',owner:'',address:'',phone:'',seal_scale:100});
+  assert.ok(calls.filter(c => c[0]==='rect' && [113,115].includes(c[4])).every(c => c[5]));
  } finally { globalThis.document=previousDocument; globalThis.Image=previousImage; }
 });

@@ -10,7 +10,9 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Vandar Setup")]
 [assembly: AssemblyProduct("Vandar")]
-[assembly: AssemblyVersion("1.2.1.0")]
+[assembly: AssemblyCompany("Behrouz Kazemi - IPS-Co")]
+[assembly: AssemblyCopyright("Copyright © Behrouz Kazemi - IPS-Co 2026")]
+[assembly: AssemblyVersion("1.2.2.0")]
 
 internal static class SetupProgram
 {

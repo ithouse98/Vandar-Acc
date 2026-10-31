@@ -88,7 +88,7 @@ app.get('/api/session', (req, res) => { const user = one('SELECT email,name,totp
 app.post('/api/setup', loginLimit, (req, res) => { if (one('SELECT id FROM users')) fail('حساب قبلاً ساخته شده است.', 409); if (!equal(req.body.token, setupToken)) fail('کد راه‌اندازی معتبر نیست.', 403); const email = text(req.body.email, 200, true); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('ایمیل معتبر نیست.'); run('INSERT INTO users(id,email,name,password) VALUES(1,?,?,?)', email.toLowerCase(), text(req.body.name, 100, true), passwordHash(validatePassword(req.body.password))); setupToken = ''; const setupFile = join(data, 'setup-token.txt'); if (process.env.PORTABLE_CONTROL === '1' && existsSync(setupFile)) unlinkSync(setupFile); audit('ایجاد حساب مدیر'); res.json({ csrf: setSession(res, true) }); });
 app.post('/api/login', loginLimit, (req, res) => { const email = text(req.body.email, 200); const password = passwordText(req.body.password); const user = one('SELECT * FROM users'); const stored = user?.password || '00000000000000000000000000000000:' + '0'.repeat(128); const ok = passwordOK(password, stored); if (!user || user.email !== email.toLowerCase() || !ok) fail('ایمیل یا گذرواژه نادرست است.', 401); if (req.session) run('DELETE FROM sessions WHERE token=?', req.session.token); audit('ورود با گذرواژه'); res.json({ pending: Boolean(user.totp), csrf: setSession(res, !user.totp) }); });
 app.post('/api/login/verify', loginLimit, csrf, (req, res) => { if (!req.session || req.session.authenticated) fail('نشست ورود معتبر نیست.', 401); const user = one('SELECT * FROM users'); const code = text(req.body.code, 40, true); const step = validStep(decrypt(user.totp), code, user.last_step); const codes = JSON.parse(user.recovery); const index = codes.findIndex(c => equal(c, hash(code))); if (!step && index < 0) fail('کد ورود معتبر نیست.', 401); transaction(() => { if (step) run('UPDATE users SET last_step=?', step); else { codes.splice(index, 1); run('UPDATE users SET recovery=?', JSON.stringify(codes)); } run('DELETE FROM sessions WHERE token=?', req.session.token); audit('ورود دومرحله‌ای'); }); res.json({ csrf: setSession(res, true) }); });
-app.use('/api', (req, res, next) => { if (['/session','/login','/login/verify','/setup'].includes(req.path)) return next(); auth(req, res, () => ['GET','HEAD'].includes(req.method) ? next() : csrf(req, res, next)); });
+app.use('/api', (req, res, next) => { if (['/session','/login','/login/verify','/setup','/window/close'].includes(req.path)) return next(); auth(req, res, () => ['GET','HEAD'].includes(req.method) ? next() : csrf(req, res, next)); });
 app.post('/api/logout', (req, res) => { run('DELETE FROM sessions WHERE token=?', req.session.token); res.clearCookie('ips_session', { path: '/', secure: production, sameSite: 'strict' }); res.json({ ok: true }); });
 app.post('/api/window/close', async (req, res) => {
  if (process.env.PORTABLE_CONTROL !== '1') fail('خروج از پنجره فقط در نسخهٔ ویندوزی فعال است.',409);
@@ -96,7 +96,7 @@ app.post('/api/window/close', async (req, res) => {
  try { result = await fetch('http://127.0.0.1:17433/close',{method:'POST',signal:AbortSignal.timeout(3000)}); }
  catch { fail('پنجره از میانبر وَندار باز نشده است؛ از Alt+F4 استفاده کنید.',409); }
  if (!result.ok) fail('بستن پنجره انجام نشد.',502);
- run('DELETE FROM sessions WHERE token=?',req.session.token);
+ if (req.session) run('DELETE FROM sessions WHERE token=?',req.session.token);
  res.clearCookie('ips_session',{path:'/',secure:production,sameSite:'strict'});
  res.json({ok:true});
 });

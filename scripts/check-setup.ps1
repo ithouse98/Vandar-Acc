@@ -2,6 +2,8 @@ param([Parameter(Mandatory=$true)][string]$Path)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression
 $assembly = [Reflection.Assembly]::LoadFrom((Resolve-Path -LiteralPath $Path).Path)
+$company = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path -LiteralPath $Path).Path).CompanyName
+if ($company -ne 'Behrouz Kazemi - IPS-Co') { throw 'Setup publisher metadata is missing.' }
 $names = $assembly.GetManifestResourceNames()
 if ('Vandar.Payload' -notin $names -or 'Vandar.Brand' -notin $names) { throw 'Setup is missing embedded resources.' }
 $stream = $assembly.GetManifestResourceStream('Vandar.Payload')

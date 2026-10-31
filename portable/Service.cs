@@ -1,7 +1,11 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.ServiceProcess;
+
+[assembly: AssemblyCompany("Behrouz Kazemi - IPS-Co")]
+[assembly: AssemblyCopyright("Copyright © Behrouz Kazemi - IPS-Co 2026")]
 
 internal sealed class VandarService : ServiceBase
 {
