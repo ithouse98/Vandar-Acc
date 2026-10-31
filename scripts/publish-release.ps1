@@ -45,8 +45,11 @@ try {
   $tracked = & git ls-files
   if ($tracked | Where-Object { $_ -match '(^|/)(data|dist|private-backup)/|(^|/)\.env$|\.sqlite|\.key$' }) { throw 'Private data appears in tracked files; remove it before publishing.' }
 
+  $ErrorActionPreference = 'Continue'
   & gh api user --jq .login 2>$null | Out-Null
-  if ($LASTEXITCODE -ne 0) {
+  $authExit = $LASTEXITCODE
+  $ErrorActionPreference = 'Stop'
+  if ($authExit -ne 0) {
     $credentialLines = (@('protocol=https','host=github.com','') -join [Environment]::NewLine) | git credential fill 2>$null
     $passwordLine = $credentialLines | Where-Object { $_ -like 'password=*' } | Select-Object -First 1
     if (-not $passwordLine) { throw 'GitHub login is missing. Run gh auth login, then retry.' }
@@ -73,8 +76,11 @@ try {
   & git push origin 'HEAD:refs/heads/main'
   if ($LASTEXITCODE -ne 0) { throw 'Git push failed. The release was not changed.' }
 
+  $ErrorActionPreference = 'Continue'
   $releaseJson = & gh release view $Version --repo $Repo --json isDraft,assets,tagName 2>$null
-  if ($LASTEXITCODE -ne 0) {
+  $viewExit = $LASTEXITCODE
+  $ErrorActionPreference = 'Stop'
+  if ($viewExit -ne 0) {
     Write-Host "Creating draft release $Version..."
     & gh release create $Version --repo $Repo --target main --title "Vandar $Version" --notes-file (Join-Path $root 'docs\release-notes.md') --draft
     if ($LASTEXITCODE -ne 0) { throw 'Could not create the draft release.' }
